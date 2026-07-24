@@ -65,8 +65,8 @@ let shake = 0;
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2("#080a10", 0.02);
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
-const cameraDirection = new THREE.Vector3(0.4, 0.72, 1).normalize();
-const cameraTarget = new THREE.Vector3(0, -0.6, 0);
+const cameraDirection = new THREE.Vector3(0.55, 0.62, 1).normalize();
+const cameraTarget = new THREE.Vector3(0, -0.4, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -189,7 +189,7 @@ function makeBlock(type, ghost = false) {
   if (ghost) {
     return new THREE.Mesh(
       ghostGeometry,
-      new THREE.MeshBasicMaterial({ color: COLORS[type], transparent: true, opacity: 0.16, wireframe: true })
+      new THREE.MeshBasicMaterial({ color: COLORS[type], transparent: true, opacity: 0.28, wireframe: true })
     );
   }
   const block = new THREE.Mesh(boxGeometry, pieceMaterial(type));
@@ -354,9 +354,20 @@ const KICKS = [
 
 function rotate(name) {
   if (paused || gameOver || !current) return;
-  const rotated = normalizeCells(current.cells.map(ROTATIONS[name]));
+  const rotFn = ROTATIONS[name];
+  const n = current.cells.length;
+  const cx = current.cells.reduce((sum, cell) => sum + cell[0], 0) / n;
+  const cy = current.cells.reduce((sum, cell) => sum + cell[1], 0) / n;
+  const cz = current.cells.reduce((sum, cell) => sum + cell[2], 0) / n;
+
+  // 绕质心做 90° 旋转，保持方块在原地翻转而不是绕角落甩出去
+  const rotated = current.cells.map(([x, y, z]) => {
+    const [rx, ry, rz] = rotFn([x - cx, y - cy, z - cz]);
+    return [Math.round(rx + cx), Math.round(ry + cy), Math.round(rz + cz)];
+  });
+
   for (const [kx, kz] of KICKS) {
-    for (const ky of [0, -1, -2]) {
+    for (const ky of [0, -1, -2, 1]) {
       if (isValid(rotated, current.x + kx, current.y + ky, current.z + kz)) {
         current.cells = rotated;
         current.x += kx;
@@ -527,12 +538,32 @@ function playClearSound(count) {
 }
 
 // ===== 输入 =====
+// 将“屏幕方向”映射到井坐标，避免鼠标微旋后左右键与视觉不一致
+function screenMove(screenDx, screenDz) {
+  const yaw = boardRoot.rotation.y;
+  const sectors = [
+    { dx: screenDx, dz: screenDz },
+    { dx: screenDz, dz: -screenDx },
+    { dx: -screenDx, dz: -screenDz },
+    { dx: -screenDz, dz: screenDx },
+  ];
+  const index = ((Math.round(yaw / (Math.PI / 2)) % 4) + 4) % 4;
+  const mapped = sectors[index];
+  move(mapped.dx, 0, mapped.dz);
+}
+
+const mobileRotations = ["yawLeft", "yawRight", "pitchForward", "rollRight"];
+let mobileRotationIndex = 0;
+
 function handleAction(action) {
-  if (action === "left") move(-1, 0, 0);
-  if (action === "right") move(1, 0, 0);
-  if (action === "forward") move(0, 0, 1);
-  if (action === "back") move(0, 0, -1);
-  if (action === "rotate") rotate("yawLeft");
+  if (action === "left") screenMove(-1, 0);
+  if (action === "right") screenMove(1, 0);
+  if (action === "forward") screenMove(0, 1);
+  if (action === "back") screenMove(0, -1);
+  if (action === "rotate") {
+    rotate(mobileRotations[mobileRotationIndex % mobileRotations.length]);
+    mobileRotationIndex += 1;
+  }
   if (action === "drop") hardDrop();
 }
 
@@ -558,6 +589,12 @@ document.addEventListener("keydown", event => {
 
 document.addEventListener("keyup", event => {
   if (event.code === "ShiftLeft" || event.code === "ShiftRight") softDrop = false;
+});
+
+// 失焦时清除软降，避免 Shift 粘滞导致一直加速
+window.addEventListener("blur", () => { softDrop = false; });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) softDrop = false;
 });
 
 document.querySelectorAll(".mobile-controls button").forEach(button => {
@@ -609,8 +646,9 @@ function animate(now) {
     }
   }
 
-  const targetRotY = pointerX * 0.3;
-  const targetRotX = pointerY * 0.1;
+  // 轻微视差，避免大幅旋转导致操作方向混乱
+  const targetRotY = pointerX * 0.12;
+  const targetRotX = pointerY * 0.05;
   boardRoot.rotation.y += (targetRotY - boardRoot.rotation.y) * 0.04;
   boardRoot.rotation.x += (targetRotX - boardRoot.rotation.x) * 0.04;
   starField.rotation.z += delta * 0.000005;

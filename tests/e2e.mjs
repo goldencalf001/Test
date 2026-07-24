@@ -55,16 +55,36 @@ const state = () => page.evaluate(() => window.__game.getState());
   check("前移被井壁阻挡（z ≥ 0）", minZ === 0, `minZ=${minZ}`);
 }
 
-// 4. 三轴旋转：立方体数量不变且位置合法
+// 4. 三轴旋转：立方体数量不变且位置合法，旋转不跳位
 {
+  await page.evaluate(() => window.__game.reset());
+  // 等一块落到较开阔位置
+  await page.evaluate(() => {
+    for (let i = 0; i < 3; i++) window.__game.move(0, -1, 0, true);
+  });
   for (const axis of ["yawLeft", "pitchForward", "rollRight"]) {
+    const before = await state();
+    const beforeCentroid = before.current.cells.reduce(
+      (acc, [x, y, z]) => [acc[0] + x + before.current.x, acc[1] + y + before.current.y, acc[2] + z + before.current.z],
+      [0, 0, 0]
+    ).map(v => v / 4);
     await page.evaluate(name => window.__game.rotate(name), axis);
     const s = await state();
+    const afterCentroid = s.current.cells.reduce(
+      (acc, [x, y, z]) => [acc[0] + x + s.current.x, acc[1] + y + s.current.y, acc[2] + z + s.current.z],
+      [0, 0, 0]
+    ).map(v => v / 4);
+    const jump = Math.hypot(
+      afterCentroid[0] - beforeCentroid[0],
+      afterCentroid[1] - beforeCentroid[1],
+      afterCentroid[2] - beforeCentroid[2]
+    );
     const inBounds = s.current.cells.every(([x, y, z]) => {
       const bx = x + s.current.x, by = y + s.current.y, bz = z + s.current.z;
       return bx >= 0 && bx < 6 && by >= 0 && by < 12 && bz >= 0 && bz < 6;
     });
     check(`旋转 ${axis} 后仍为 4 格且在井内`, s.current.cells.length === 4 && inBounds);
+    check(`旋转 ${axis} 不跳位（质心位移 < 0.75）`, jump < 0.75, `jump=${jump.toFixed(2)}`);
   }
 }
 
