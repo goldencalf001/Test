@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#090b12" />
+    <meta name="description" content="NEON STACK — 沉浸式 3D 俄罗斯方块" />
+    <title>NEON STACK — 3D 俄罗斯方块</title>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Neon Stack 首页">
+        <span class="brand-mark" aria-hidden="true">
+          <i></i><i></i><i></i><i></i>
+        </span>
+        <span>NEON <b>STACK</b></span>
+      </a>
+      <div class="top-actions">
+        <button class="icon-button" id="soundButton" aria-label="切换音效" title="切换音效">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5Zm4.6 3.4a5 5 0 0 1 0 7.1M18.4 5.6a9 9 0 0 1 0 12.8"/></svg>
+        </button>
+        <button class="small-button" id="pauseButton"><span class="pause-icon">Ⅱ</span> 暂停</button>
+      </div>
+    </header>
+
+    <main class="game-layout">
+      <section class="hero-copy">
+        <div class="eyebrow"><span></span> THREE.JS EXPERIENCE</div>
+        <h1>堆叠光芒<br /><em>突破极限</em></h1>
+        <p>经典玩法，全新维度。旋转、落下、消除，在霓虹光影中刷新你的最高纪录。</p>
+        <div class="status-chip"><i></i><span id="statusText">游戏进行中</span></div>
+      </section>
+
+      <section class="game-stage" aria-label="3D 俄罗斯方块游戏区">
+        <div id="gameCanvas"></div>
+        <div class="stage-glow"></div>
+        <div class="countdown" id="countdown"></div>
+        <div class="game-overlay hidden" id="gameOverlay">
+          <span class="overlay-kicker">本局结束</span>
+          <h2>GAME OVER</h2>
+          <p>最终得分 <strong id="finalScore">0</strong></p>
+          <button class="primary-button" id="restartButton">再来一局 <span>↻</span></button>
+        </div>
+        <div class="pause-overlay hidden" id="pauseOverlay">
+          <span>Ⅱ</span><h2>已暂停</h2><p>按 P 或点击继续</p>
+        </div>
+      </section>
+
+      <aside class="game-panel">
+        <div class="panel-card score-card">
+          <span class="panel-label">SCORE <small>得分</small></span>
+          <strong id="score">000000</strong>
+          <div class="best-row"><span>最高纪录</span><b id="bestScore">000000</b></div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="panel-card"><span class="panel-label">LEVEL <small>等级</small></span><strong id="level">01</strong></div>
+          <div class="panel-card"><span class="panel-label">LINES <small>消除</small></span><strong id="lines">00</strong></div>
+        </div>
+
+        <div class="panel-card next-card">
+          <span class="panel-label">NEXT <small>下一个</small></span>
+          <div class="next-preview" id="nextPreview" aria-label="下一个方块"></div>
+        </div>
+
+        <div class="controls-card">
+          <span class="panel-label">CONTROLS <small>操作</small></span>
+          <div class="control-list">
+            <div><span><kbd>←</kbd><kbd>→</kbd></span><b>左右移动</b></div>
+            <div><span><kbd>↑</kbd></span><b>旋转方块</b></div>
+            <div><span><kbd>↓</kbd></span><b>加速下落</b></div>
+            <div><span><kbd class="space">SPACE</kbd></span><b>瞬间落下</b></div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <div class="mobile-controls" aria-label="触屏操作">
+      <button data-action="left" aria-label="左移">←</button>
+      <button data-action="rotate" aria-label="旋转">↻</button>
+      <button data-action="right" aria-label="右移">→</button>
+      <button data-action="down" aria-label="下落">↓</button>
+      <button data-action="drop" aria-label="快速落下">⇣</button>
+    </div>
+
+    <footer><span>© 2026 NEON STACK</span><span class="footer-line"></span><span>POWERED BY THREE.JS</span></footer>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

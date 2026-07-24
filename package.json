@@ -1,0 +1,26 @@
+{
+  "name": "neon-stack",
+  "version": "1.0.0",
+  "description": "A polished 3D Tetris game powered by Three.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goldencalf001/Test.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/goldencalf001/Test/issues"
+  },
+  "homepage": "https://github.com/goldencalf001/Test#readme",
+  "dependencies": {
+    "three": "^0.185.1",
+    "vite": "^8.1.5"
+  }
+}
