@@ -29,8 +29,8 @@
     <main class="game-layout">
       <section class="hero-copy">
         <div class="eyebrow"><span></span> THREE.JS EXPERIENCE</div>
-        <h1>堆叠光芒<br /><em>突破极限</em></h1>
-        <p>经典玩法，全新维度。旋转、落下、消除，在霓虹光影中刷新你的最高纪录。</p>
+        <h1>立体深井<br /><em>层层消除</em></h1>
+        <p>真正的三维俄罗斯方块。方块坠入 6×6×12 的立体深井，绕三轴旋转，填满整层即可消除。</p>
         <div class="status-chip"><i></i><span id="statusText">游戏进行中</span></div>
       </section>
 
@@ -58,7 +58,7 @@
 
         <div class="stat-grid">
           <div class="panel-card"><span class="panel-label">LEVEL <small>等级</small></span><strong id="level">01</strong></div>
-          <div class="panel-card"><span class="panel-label">LINES <small>消除</small></span><strong id="lines">00</strong></div>
+          <div class="panel-card"><span class="panel-label">LAYERS <small>层数</small></span><strong id="lines">00</strong></div>
         </div>
 
         <div class="panel-card next-card">
@@ -69,9 +69,11 @@
         <div class="controls-card">
           <span class="panel-label">CONTROLS <small>操作</small></span>
           <div class="control-list">
-            <div><span><kbd>←</kbd><kbd>→</kbd></span><b>左右移动</b></div>
-            <div><span><kbd>↑</kbd></span><b>旋转方块</b></div>
-            <div><span><kbd>↓</kbd></span><b>加速下落</b></div>
+            <div><span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></span><b>水平移动</b></div>
+            <div><span><kbd>Q</kbd><kbd>E</kbd></span><b>水平旋转</b></div>
+            <div><span><kbd>W</kbd><kbd>S</kbd></span><b>前后翻转</b></div>
+            <div><span><kbd>A</kbd><kbd>D</kbd></span><b>侧向翻转</b></div>
+            <div><span><kbd class="space">SHIFT</kbd></span><b>加速下落</b></div>
             <div><span><kbd class="space">SPACE</kbd></span><b>瞬间落下</b></div>
           </div>
         </div>
@@ -80,9 +82,10 @@
 
     <div class="mobile-controls" aria-label="触屏操作">
       <button data-action="left" aria-label="左移">←</button>
-      <button data-action="rotate" aria-label="旋转">↻</button>
       <button data-action="right" aria-label="右移">→</button>
-      <button data-action="down" aria-label="下落">↓</button>
+      <button data-action="back" aria-label="向后">↑</button>
+      <button data-action="forward" aria-label="向前">↓</button>
+      <button data-action="rotate" aria-label="旋转">↻</button>
       <button data-action="drop" aria-label="快速落下">⇣</button>
     </div>
 

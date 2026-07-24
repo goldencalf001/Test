@@ -1,25 +1,32 @@
 import * as THREE from "three";
 import "./style.css";
 
-const WIDTH = 10;
-const HEIGHT = 20;
+// ===== 3D 井（Blockout 风格）配置 =====
+const SIZE_X = 6;
+const SIZE_Z = 6;
+const HEIGHT = 12;
+
 const COLORS = {
   I: "#30dfff",
   O: "#ffe24a",
+  L: "#ff973d",
   T: "#b16cff",
   S: "#7dff42",
-  Z: "#ff4b6e",
-  J: "#4188ff",
-  L: "#ff973d",
+  B: "#ff4b6e",
+  P: "#4188ff",
+  N: "#baff36",
 };
+
+// 三维多联立方体（tetracube）：[x, y, z]
 const SHAPES = {
-  I: [[0, 0], [1, 0], [2, 0], [3, 0]],
-  O: [[0, 0], [1, 0], [0, 1], [1, 1]],
-  T: [[0, 0], [1, 0], [2, 0], [1, 1]],
-  S: [[1, 0], [2, 0], [0, 1], [1, 1]],
-  Z: [[0, 0], [1, 0], [1, 1], [2, 1]],
-  J: [[0, 0], [0, 1], [1, 0], [2, 0]],
-  L: [[0, 0], [1, 0], [2, 0], [2, 1]],
+  I: [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]],
+  O: [[0, 0, 0], [1, 0, 0], [0, 0, 1], [1, 0, 1]],
+  L: [[0, 0, 0], [1, 0, 0], [2, 0, 0], [2, 0, 1]],
+  T: [[0, 0, 0], [1, 0, 0], [2, 0, 0], [1, 0, 1]],
+  S: [[1, 0, 0], [2, 0, 0], [0, 0, 1], [1, 0, 1]],
+  B: [[0, 0, 0], [1, 0, 0], [0, 0, 1], [0, 1, 0]],
+  P: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [1, 1, 1]],
+  N: [[0, 0, 0], [1, 0, 0], [0, 0, 1], [0, 1, 1]],
 };
 
 const elements = {
@@ -36,7 +43,6 @@ const elements = {
   restart: document.querySelector("#restartButton"),
   finalScore: document.querySelector("#finalScore"),
   status: document.querySelector("#statusText"),
-  countdown: document.querySelector("#countdown"),
 };
 
 let board;
@@ -44,92 +50,124 @@ let current;
 let nextType;
 let bag = [];
 let score = 0;
-let lines = 0;
+let layers = 0;
 let level = 1;
 let best = Number(localStorage.getItem("neon-stack-best") || 0);
 let paused = false;
 let gameOver = false;
 let soundEnabled = true;
+let softDrop = false;
 let lastDrop = 0;
 let lastFrame = performance.now();
 let shake = 0;
 
+// ===== 主场景 =====
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x080a10, 0.035);
-const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-camera.position.set(0, 0.3, 31);
+scene.fog = new THREE.FogExp2("#080a10", 0.02);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
+const cameraDirection = new THREE.Vector3(0.4, 0.72, 1).normalize();
+const cameraTarget = new THREE.Vector3(0, -0.6, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setClearColor(0x000000, 0);
+renderer.setClearColor("#000000", 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.25;
+renderer.toneMappingExposure = 1.22;
 elements.canvas.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xaec7ff, 0x141006, 1.7));
-const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);
-keyLight.position.set(-7, 10, 12);
+scene.add(new THREE.HemisphereLight("#aec7ff", "#141006", 1.5));
+const keyLight = new THREE.DirectionalLight("#ffffff", 2.8);
+keyLight.position.set(-8, 14, 10);
 scene.add(keyLight);
-const limeLight = new THREE.PointLight(0xbaff36, 18, 23);
-limeLight.position.set(5, -7, 8);
+const limeLight = new THREE.PointLight("#baff36", 26, 30);
+limeLight.position.set(7, -4, 9);
 scene.add(limeLight);
-const blueLight = new THREE.PointLight(0x267dff, 15, 25);
-blueLight.position.set(-7, 7, 5);
+const blueLight = new THREE.PointLight("#267dff", 22, 32);
+blueLight.position.set(-8, 9, -6);
 scene.add(blueLight);
 
 const boardRoot = new THREE.Group();
-boardRoot.rotation.set(-0.025, -0.075, 0);
 scene.add(boardRoot);
 
-const backing = new THREE.Mesh(
-  new THREE.PlaneGeometry(WIDTH + 0.5, HEIGHT + 0.5),
-  new THREE.MeshStandardMaterial({ color: 0x090d14, roughness: 0.66, metalness: 0.3, transparent: true, opacity: 0.92 })
+// 井底底座
+const basePlate = new THREE.Mesh(
+  new THREE.BoxGeometry(SIZE_X + 0.9, 0.4, SIZE_Z + 0.9),
+  new THREE.MeshStandardMaterial({ color: "#11141d", metalness: 0.55, roughness: 0.4 })
 );
-backing.position.z = -0.65;
-boardRoot.add(backing);
+basePlate.position.y = -HEIGHT / 2 - 0.22;
+boardRoot.add(basePlate);
 
-const frameMaterial = new THREE.MeshStandardMaterial({ color: 0x333842, metalness: 0.8, roughness: 0.24 });
-[
-  [0, HEIGHT / 2 + 0.35, WIDTH + 1.15, 0.18],
-  [0, -HEIGHT / 2 - 0.35, WIDTH + 1.15, 0.18],
-  [-WIDTH / 2 - 0.35, 0, 0.18, HEIGHT + 0.88],
-  [WIDTH / 2 + 0.35, 0, 0.18, HEIGHT + 0.88],
-].forEach(([x, y, w, h]) => {
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.42), frameMaterial);
-  rail.position.set(x, y, -0.08);
-  boardRoot.add(rail);
-});
-
-const gridMaterial = new THREE.LineBasicMaterial({ color: 0x48505e, transparent: true, opacity: 0.14 });
-const gridPoints = [];
-for (let x = 0; x <= WIDTH; x++) {
-  gridPoints.push(new THREE.Vector3(x - WIDTH / 2, -HEIGHT / 2, -0.55), new THREE.Vector3(x - WIDTH / 2, HEIGHT / 2, -0.55));
+// 井壁网格线（底面 + 四壁 + 层环），提供深度参照
+function buildWellGrid() {
+  const points = [];
+  const x0 = -SIZE_X / 2;
+  const x1 = SIZE_X / 2;
+  const z0 = -SIZE_Z / 2;
+  const z1 = SIZE_Z / 2;
+  const y0 = -HEIGHT / 2;
+  const y1 = HEIGHT / 2;
+  for (let x = 0; x <= SIZE_X; x++) {
+    const wx = x0 + x;
+    points.push(new THREE.Vector3(wx, y0, z0), new THREE.Vector3(wx, y0, z1));
+    points.push(new THREE.Vector3(wx, y0, z0), new THREE.Vector3(wx, y1, z0));
+    points.push(new THREE.Vector3(wx, y0, z1), new THREE.Vector3(wx, y1, z1));
+  }
+  for (let z = 0; z <= SIZE_Z; z++) {
+    const wz = z0 + z;
+    points.push(new THREE.Vector3(x0, y0, wz), new THREE.Vector3(x1, y0, wz));
+    points.push(new THREE.Vector3(x0, y0, wz), new THREE.Vector3(x0, y1, wz));
+    points.push(new THREE.Vector3(x1, y0, wz), new THREE.Vector3(x1, y1, wz));
+  }
+  for (let y = 0; y <= HEIGHT; y++) {
+    const wy = y0 + y;
+    points.push(new THREE.Vector3(x0, wy, z0), new THREE.Vector3(x1, wy, z0));
+    points.push(new THREE.Vector3(x0, wy, z1), new THREE.Vector3(x1, wy, z1));
+    points.push(new THREE.Vector3(x0, wy, z0), new THREE.Vector3(x0, wy, z1));
+    points.push(new THREE.Vector3(x1, wy, z0), new THREE.Vector3(x1, wy, z1));
+  }
+  return new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(points),
+    new THREE.LineBasicMaterial({ color: "#566074", transparent: true, opacity: 0.16 })
+  );
 }
-for (let y = 0; y <= HEIGHT; y++) {
-  gridPoints.push(new THREE.Vector3(-WIDTH / 2, y - HEIGHT / 2, -0.55), new THREE.Vector3(WIDTH / 2, y - HEIGHT / 2, -0.55));
-}
-const grid = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(gridPoints), gridMaterial);
-boardRoot.add(grid);
+boardRoot.add(buildWellGrid());
 
+// 井口高亮描边
+const rimPoints = [
+  new THREE.Vector3(-SIZE_X / 2, HEIGHT / 2, -SIZE_Z / 2),
+  new THREE.Vector3(SIZE_X / 2, HEIGHT / 2, -SIZE_Z / 2),
+  new THREE.Vector3(SIZE_X / 2, HEIGHT / 2, SIZE_Z / 2),
+  new THREE.Vector3(-SIZE_X / 2, HEIGHT / 2, SIZE_Z / 2),
+  new THREE.Vector3(-SIZE_X / 2, HEIGHT / 2, -SIZE_Z / 2),
+];
+boardRoot.add(new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(rimPoints),
+  new THREE.LineBasicMaterial({ color: "#baff36", transparent: true, opacity: 0.55 })
+));
+
+// 星空背景
 const starsGeometry = new THREE.BufferGeometry();
-const stars = new Float32Array(240 * 3);
+const stars = new Float32Array(260 * 3);
 for (let i = 0; i < stars.length; i += 3) {
-  stars[i] = (Math.random() - 0.5) * 36;
-  stars[i + 1] = (Math.random() - 0.5) * 35;
-  stars[i + 2] = -4 - Math.random() * 16;
+  stars[i] = (Math.random() - 0.5) * 46;
+  stars[i + 1] = (Math.random() - 0.5) * 40;
+  stars[i + 2] = -6 - Math.random() * 22;
 }
 starsGeometry.setAttribute("position", new THREE.BufferAttribute(stars, 3));
-const starField = new THREE.Points(starsGeometry, new THREE.PointsMaterial({ color: 0x9eb0c9, size: 0.035, transparent: true, opacity: 0.5 }));
+const starField = new THREE.Points(starsGeometry, new THREE.PointsMaterial({ color: "#9eb0c9", size: 0.05, transparent: true, opacity: 0.5 }));
 scene.add(starField);
 
 const lockedGroup = new THREE.Group();
 const ghostGroup = new THREE.Group();
 const activeGroup = new THREE.Group();
-boardRoot.add(lockedGroup, ghostGroup, activeGroup);
+const footprintGroup = new THREE.Group();
+boardRoot.add(lockedGroup, ghostGroup, activeGroup, footprintGroup);
 
-const boxGeometry = new THREE.BoxGeometry(0.88, 0.88, 0.88, 2, 2, 2);
-const ghostGeometry = new THREE.BoxGeometry(0.86, 0.86, 0.18);
+const boxGeometry = new THREE.BoxGeometry(0.92, 0.92, 0.92, 2, 2, 2);
+const edgesGeometry = new THREE.EdgesGeometry(boxGeometry, 25);
+const ghostGeometry = new THREE.BoxGeometry(0.9, 0.9, 0.9);
+const footprintGeometry = new THREE.PlaneGeometry(0.94, 0.94);
 const materialCache = {};
 
 function pieceMaterial(type) {
@@ -137,11 +175,11 @@ function pieceMaterial(type) {
     materialCache[type] = new THREE.MeshPhysicalMaterial({
       color: COLORS[type],
       emissive: new THREE.Color(COLORS[type]),
-      emissiveIntensity: 0.22,
+      emissiveIntensity: 0.2,
       metalness: 0.18,
-      roughness: 0.28,
-      clearcoat: 0.75,
-      clearcoatRoughness: 0.2,
+      roughness: 0.3,
+      clearcoat: 0.7,
+      clearcoatRoughness: 0.22,
     });
   }
   return materialCache[type];
@@ -151,20 +189,19 @@ function makeBlock(type, ghost = false) {
   if (ghost) {
     return new THREE.Mesh(
       ghostGeometry,
-      new THREE.MeshBasicMaterial({ color: COLORS[type], transparent: true, opacity: 0.15, wireframe: true })
+      new THREE.MeshBasicMaterial({ color: COLORS[type], transparent: true, opacity: 0.16, wireframe: true })
     );
   }
   const block = new THREE.Mesh(boxGeometry, pieceMaterial(type));
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(boxGeometry, 25),
-    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.27 })
-  );
-  block.add(edges);
+  block.add(new THREE.LineSegments(
+    edgesGeometry,
+    new THREE.LineBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.28 })
+  ));
   return block;
 }
 
-function worldPosition(x, y, z = 0) {
-  return [x - WIDTH / 2 + 0.5, y - HEIGHT / 2 + 0.5, z];
+function worldPosition(x, y, z) {
+  return [x - SIZE_X / 2 + 0.5, y - HEIGHT / 2 + 0.5, z - SIZE_Z / 2 + 0.5];
 }
 
 function clearGroup(group) {
@@ -173,37 +210,56 @@ function clearGroup(group) {
 
 function syncLockedBlocks() {
   clearGroup(lockedGroup);
-  board.forEach((row, y) => row.forEach((type, x) => {
-    if (!type) return;
-    const block = makeBlock(type);
-    block.position.set(...worldPosition(x, y));
-    lockedGroup.add(block);
-  }));
-}
-
-function absoluteCells(piece, overrideY = piece.y) {
-  return piece.cells.map(([x, y]) => [x + piece.x, y + overrideY]);
+  for (let y = 0; y < HEIGHT; y++) {
+    for (let z = 0; z < SIZE_Z; z++) {
+      for (let x = 0; x < SIZE_X; x++) {
+        const type = board[y][z][x];
+        if (!type) continue;
+        const block = makeBlock(type);
+        block.position.set(...worldPosition(x, y, z));
+        lockedGroup.add(block);
+      }
+    }
+  }
 }
 
 function syncActivePiece() {
   clearGroup(activeGroup);
   clearGroup(ghostGroup);
+  clearGroup(footprintGroup);
   if (!current || gameOver) return;
 
   let ghostY = current.y;
-  while (isValid(current, current.x, ghostY - 1, current.cells)) ghostY--;
+  while (isValid(current.cells, current.x, ghostY - 1, current.z)) ghostY--;
 
-  current.cells.forEach(([x, y]) => {
+  const columns = new Set();
+  current.cells.forEach(([x, y, z]) => {
     const ghost = makeBlock(current.type, true);
-    ghost.position.set(...worldPosition(x + current.x, y + ghostY, -0.25));
+    ghost.position.set(...worldPosition(x + current.x, y + ghostY, z + current.z));
     ghostGroup.add(ghost);
 
     const block = makeBlock(current.type);
-    block.position.set(...worldPosition(x + current.x, y + current.y, 0.08));
+    block.position.set(...worldPosition(x + current.x, y + current.y, z + current.z));
     activeGroup.add(block);
+
+    columns.add(`${x + current.x},${z + current.z}`);
+  });
+
+  // 底面投影，辅助瞄准
+  columns.forEach(key => {
+    const [x, z] = key.split(",").map(Number);
+    const marker = new THREE.Mesh(
+      footprintGeometry,
+      new THREE.MeshBasicMaterial({ color: COLORS[current.type], transparent: true, opacity: 0.2, side: THREE.DoubleSide })
+    );
+    marker.rotation.x = -Math.PI / 2;
+    const [wx, , wz] = worldPosition(x, 0, z);
+    marker.position.set(wx, -HEIGHT / 2 + 0.015, wz);
+    footprintGroup.add(marker);
   });
 }
 
+// ===== 规则逻辑 =====
 function shuffledBag() {
   const types = Object.keys(SHAPES);
   for (let i = types.length - 1; i > 0; i--) {
@@ -218,41 +274,60 @@ function takeType() {
   return bag.pop();
 }
 
+function boundsOf(cells) {
+  return {
+    x: Math.max(...cells.map(c => c[0])) + 1,
+    y: Math.max(...cells.map(c => c[1])) + 1,
+    z: Math.max(...cells.map(c => c[2])) + 1,
+  };
+}
+
+function normalizeCells(cells) {
+  const minX = Math.min(...cells.map(c => c[0]));
+  const minY = Math.min(...cells.map(c => c[1]));
+  const minZ = Math.min(...cells.map(c => c[2]));
+  return cells.map(([x, y, z]) => [x - minX, y - minY, z - minZ]);
+}
+
 function createPiece(type) {
   const cells = SHAPES[type].map(cell => [...cell]);
-  const pieceWidth = Math.max(...cells.map(([x]) => x)) + 1;
-  const pieceHeight = Math.max(...cells.map(([, y]) => y)) + 1;
-  return { type, cells, x: Math.floor((WIDTH - pieceWidth) / 2), y: HEIGHT - pieceHeight };
+  const size = boundsOf(cells);
+  return {
+    type,
+    cells,
+    x: Math.floor((SIZE_X - size.x) / 2),
+    y: HEIGHT - size.y,
+    z: Math.floor((SIZE_Z - size.z) / 2),
+  };
 }
 
 function spawnPiece() {
   current = createPiece(nextType || takeType());
   nextType = takeType();
   renderNext();
-  if (!isValid(current, current.x, current.y, current.cells)) endGame();
+  if (!isValid(current.cells, current.x, current.y, current.z)) {
+    endGame();
+    return;
+  }
   syncActivePiece();
 }
 
-function isValid(piece, targetX, targetY, cells) {
-  return cells.every(([x, y]) => {
-    const bx = x + targetX;
-    const by = y + targetY;
-    return bx >= 0 && bx < WIDTH && by >= 0 && by < HEIGHT && !board[by][bx];
+function isValid(cells, px, py, pz) {
+  return cells.every(([x, y, z]) => {
+    const bx = x + px;
+    const by = y + py;
+    const bz = z + pz;
+    return bx >= 0 && bx < SIZE_X && by >= 0 && by < HEIGHT && bz >= 0 && bz < SIZE_Z && !board[by][bz][bx];
   });
 }
 
-function normalizeCells(cells) {
-  const minX = Math.min(...cells.map(([x]) => x));
-  const minY = Math.min(...cells.map(([, y]) => y));
-  return cells.map(([x, y]) => [x - minX, y - minY]);
-}
-
-function move(dx, dy, fromPlayer = true) {
+function move(dx, dy, dz, fromPlayer = true) {
   if (paused || gameOver || !current) return false;
-  if (isValid(current, current.x + dx, current.y + dy, current.cells)) {
+  if (isValid(current.cells, current.x + dx, current.y + dy, current.z + dz)) {
     current.x += dx;
     current.y += dy;
-    if (fromPlayer && dy < 0) score += 1;
+    current.z += dz;
+    if (dy < 0 && softDrop && !fromPlayer) score += 1;
     syncActivePiece();
     updateStats();
     if (fromPlayer) playTone(260, 0.025, 0.018);
@@ -262,17 +337,35 @@ function move(dx, dy, fromPlayer = true) {
   return false;
 }
 
-function rotate() {
-  if (paused || gameOver || !current || current.type === "O") return;
-  const rotated = normalizeCells(current.cells.map(([x, y]) => [y, -x]));
-  const kicks = [0, -1, 1, -2, 2];
-  for (const kick of kicks) {
-    if (isValid(current, current.x + kick, current.y, rotated)) {
-      current.cells = rotated;
-      current.x += kick;
-      syncActivePiece();
-      playTone(520, 0.04, 0.025);
-      return;
+const ROTATIONS = {
+  yawLeft: ([x, y, z]) => [z, y, -x],
+  yawRight: ([x, y, z]) => [-z, y, x],
+  pitchForward: ([x, y, z]) => [x, z, -y],
+  pitchBack: ([x, y, z]) => [x, -z, y],
+  rollLeft: ([x, y, z]) => [-y, x, z],
+  rollRight: ([x, y, z]) => [y, -x, z],
+};
+
+const KICKS = [
+  [0, 0], [1, 0], [-1, 0], [0, 1], [0, -1],
+  [2, 0], [-2, 0], [0, 2], [0, -2],
+  [1, 1], [-1, 1], [1, -1], [-1, -1],
+];
+
+function rotate(name) {
+  if (paused || gameOver || !current) return;
+  const rotated = normalizeCells(current.cells.map(ROTATIONS[name]));
+  for (const [kx, kz] of KICKS) {
+    for (const ky of [0, -1, -2]) {
+      if (isValid(rotated, current.x + kx, current.y + ky, current.z + kz)) {
+        current.cells = rotated;
+        current.x += kx;
+        current.y += ky;
+        current.z += kz;
+        syncActivePiece();
+        playTone(520, 0.04, 0.025);
+        return;
+      }
     }
   }
 }
@@ -280,7 +373,7 @@ function rotate() {
 function hardDrop() {
   if (paused || gameOver || !current) return;
   let distance = 0;
-  while (isValid(current, current.x, current.y - 1, current.cells)) {
+  while (isValid(current.cells, current.x, current.y - 1, current.z)) {
     current.y--;
     distance++;
   }
@@ -291,50 +384,64 @@ function hardDrop() {
 }
 
 function lockPiece() {
-  absoluteCells(current).forEach(([x, y]) => { board[y][x] = current.type; });
-  clearLines();
+  current.cells.forEach(([x, y, z]) => {
+    board[y + current.y][z + current.z][x + current.x] = current.type;
+  });
+  clearLayers();
   spawnPiece();
   syncLockedBlocks();
   updateStats();
 }
 
-function clearLines() {
+function clearLayers() {
   const fullRows = [];
-  board.forEach((row, index) => {
-    if (row.every(Boolean)) fullRows.push(index);
-  });
+  for (let y = 0; y < HEIGHT; y++) {
+    if (board[y].every(row => row.every(Boolean))) fullRows.push(y);
+  }
   if (!fullRows.length) return;
 
   board = board.filter((_, index) => !fullRows.includes(index));
-  while (board.length < HEIGHT) board.push(Array(WIDTH).fill(null));
+  while (board.length < HEIGHT) {
+    board.push(Array.from({ length: SIZE_Z }, () => Array(SIZE_X).fill(null)));
+  }
   const count = fullRows.length;
-  lines += count;
-  level = Math.floor(lines / 10) + 1;
-  score += [0, 100, 300, 500, 800][count] * level;
-  shake = 0.22 + count * 0.06;
+  layers += count;
+  level = Math.floor(layers / 4) + 1;
+  score += [0, 600, 1600, 3400, 6000][Math.min(count, 4)] * level;
+  shake = 0.24 + count * 0.08;
   playClearSound(count);
 }
 
+// ===== 下一块 3D 预览 =====
+const previewScene = new THREE.Scene();
+const previewCamera = new THREE.PerspectiveCamera(34, 4 / 3, 0.1, 30);
+previewCamera.position.set(2.6, 2.4, 4.4);
+previewCamera.lookAt(0, 0, 0);
+previewScene.add(new THREE.HemisphereLight("#cfe0ff", "#20180a", 2.2));
+const previewLight = new THREE.DirectionalLight("#ffffff", 2.6);
+previewLight.position.set(3, 6, 4);
+previewScene.add(previewLight);
+const previewGroup = new THREE.Group();
+previewScene.add(previewGroup);
+
+const previewRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+previewRenderer.setSize(132, 96);
+previewRenderer.outputColorSpace = THREE.SRGBColorSpace;
+elements.next.replaceChildren(previewRenderer.domElement);
+
 function renderNext() {
-  elements.next.replaceChildren();
-  const grid = document.createElement("div");
-  grid.className = "preview-grid";
+  clearGroup(previewGroup);
   const cells = normalizeCells(SHAPES[nextType]);
-  const width = Math.max(...cells.map(([x]) => x)) + 1;
-  const offset = Math.floor((4 - width) / 2);
-  for (let y = 2; y >= 0; y--) {
-    for (let x = 0; x < 4; x++) {
-      const cell = document.createElement("i");
-      if (cells.some(([cx, cy]) => cx + offset === x && cy === y)) {
-        cell.className = "preview-block";
-        cell.style.setProperty("--piece", COLORS[nextType]);
-      }
-      grid.appendChild(cell);
-    }
-  }
-  elements.next.appendChild(grid);
+  const size = boundsOf(cells);
+  cells.forEach(([x, y, z]) => {
+    const block = makeBlock(nextType);
+    block.position.set(x - size.x / 2 + 0.5, y - size.y / 2 + 0.5, z - size.z / 2 + 0.5);
+    previewGroup.add(block);
+  });
 }
 
+// ===== HUD =====
 function formatScore(value) {
   return Math.max(0, value).toString().padStart(6, "0");
 }
@@ -347,7 +454,7 @@ function updateStats() {
   elements.score.textContent = formatScore(score);
   elements.best.textContent = formatScore(best);
   elements.level.textContent = String(level).padStart(2, "0");
-  elements.lines.textContent = String(lines).padStart(2, "0");
+  elements.lines.textContent = String(layers).padStart(2, "0");
 }
 
 function endGame() {
@@ -355,6 +462,7 @@ function endGame() {
   current = null;
   clearGroup(activeGroup);
   clearGroup(ghostGroup);
+  clearGroup(footprintGroup);
   elements.finalScore.textContent = formatScore(score);
   elements.overlay.classList.remove("hidden");
   elements.status.textContent = "游戏结束";
@@ -371,15 +479,18 @@ function togglePause() {
 }
 
 function resetGame() {
-  board = Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(null));
+  board = Array.from({ length: HEIGHT }, () =>
+    Array.from({ length: SIZE_Z }, () => Array(SIZE_X).fill(null))
+  );
   bag = [];
   current = null;
   nextType = takeType();
   score = 0;
-  lines = 0;
+  layers = 0;
   level = 1;
   paused = false;
   gameOver = false;
+  softDrop = false;
   lastDrop = 0;
   elements.overlay.classList.add("hidden");
   elements.pauseOverlay.classList.add("hidden");
@@ -390,6 +501,7 @@ function resetGame() {
   spawnPiece();
 }
 
+// ===== 音效 =====
 let audioContext;
 function playTone(frequency, duration, volume = 0.025, delay = 0) {
   if (!soundEnabled) return;
@@ -414,24 +526,38 @@ function playClearSound(count) {
   for (let i = 0; i < count + 2; i++) playTone(330 + i * 120, 0.12, 0.035, i * 0.055);
 }
 
+// ===== 输入 =====
 function handleAction(action) {
-  if (action === "left") move(-1, 0);
-  if (action === "right") move(1, 0);
-  if (action === "down") move(0, -1);
-  if (action === "rotate") rotate();
+  if (action === "left") move(-1, 0, 0);
+  if (action === "right") move(1, 0, 0);
+  if (action === "forward") move(0, 0, 1);
+  if (action === "back") move(0, 0, -1);
+  if (action === "rotate") rotate("yawLeft");
   if (action === "drop") hardDrop();
 }
 
 document.addEventListener("keydown", event => {
-  const controls = ["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", "Space"];
-  if (controls.includes(event.code)) event.preventDefault();
-  if (event.repeat && ["ArrowUp", "Space", "KeyP"].includes(event.code)) return;
+  const blocked = ["ArrowLeft", "ArrowRight", "ArrowDown", "ArrowUp", "Space"];
+  if (blocked.includes(event.code)) event.preventDefault();
+  if (event.repeat && ["Space", "KeyP", "Escape"].includes(event.code)) return;
+
   if (event.code === "ArrowLeft") handleAction("left");
   if (event.code === "ArrowRight") handleAction("right");
-  if (event.code === "ArrowDown") handleAction("down");
-  if (event.code === "ArrowUp") handleAction("rotate");
+  if (event.code === "ArrowUp") handleAction("back");
+  if (event.code === "ArrowDown") handleAction("forward");
+  if (event.code === "KeyQ") rotate("yawLeft");
+  if (event.code === "KeyE") rotate("yawRight");
+  if (event.code === "KeyW") rotate("pitchForward");
+  if (event.code === "KeyS") rotate("pitchBack");
+  if (event.code === "KeyA") rotate("rollLeft");
+  if (event.code === "KeyD") rotate("rollRight");
   if (event.code === "Space") handleAction("drop");
+  if (event.code === "ShiftLeft" || event.code === "ShiftRight") softDrop = true;
   if (event.code === "KeyP" || event.code === "Escape") togglePause();
+});
+
+document.addEventListener("keyup", event => {
+  if (event.code === "ShiftLeft" || event.code === "ShiftRight") softDrop = false;
 });
 
 document.querySelectorAll(".mobile-controls button").forEach(button => {
@@ -455,12 +581,15 @@ window.addEventListener("pointermove", event => {
   pointerY = event.clientY / window.innerHeight - 0.5;
 });
 
+// ===== 布局与渲染循环 =====
 function resize() {
   const { width, height } = elements.canvas.getBoundingClientRect();
+  if (!width || !height) return;
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
-  const requiredHeight = HEIGHT + 2.2;
-  camera.position.z = requiredHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * Math.max(1, camera.aspect * 0.54);
+  const distance = 21.5 * Math.max(1, 1.05 / camera.aspect);
+  camera.position.copy(cameraDirection).multiplyScalar(distance).add(cameraTarget);
+  camera.lookAt(cameraTarget);
   camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe(elements.canvas);
@@ -472,21 +601,20 @@ function animate(now) {
 
   if (!paused && !gameOver) {
     lastDrop += delta;
-    const interval = Math.max(90, 900 * Math.pow(0.83, level - 1));
+    const base = Math.max(130, 1050 * Math.pow(0.8, level - 1));
+    const interval = softDrop ? Math.max(35, base / 14) : base;
     if (lastDrop >= interval) {
-      move(0, -1, false);
+      move(0, -1, 0, false);
       lastDrop = 0;
     }
   }
 
-  const targetRotY = -0.075 + pointerX * 0.045;
-  const targetRotX = -0.025 + pointerY * 0.025;
-  boardRoot.rotation.y += (targetRotY - boardRoot.rotation.y) * 0.035;
-  boardRoot.rotation.x += (targetRotX - boardRoot.rotation.x) * 0.035;
-  starField.rotation.z += delta * 0.000006;
-  activeGroup.children.forEach((block, index) => {
-    block.position.z = 0.08 + Math.sin(now * 0.003 + index) * 0.025;
-  });
+  const targetRotY = pointerX * 0.3;
+  const targetRotX = pointerY * 0.1;
+  boardRoot.rotation.y += (targetRotY - boardRoot.rotation.y) * 0.04;
+  boardRoot.rotation.x += (targetRotX - boardRoot.rotation.x) * 0.04;
+  starField.rotation.z += delta * 0.000005;
+
   if (shake > 0.001) {
     boardRoot.position.x = (Math.random() - 0.5) * shake;
     boardRoot.position.y = (Math.random() - 0.5) * shake;
@@ -494,6 +622,10 @@ function animate(now) {
   } else {
     boardRoot.position.set(0, 0, 0);
   }
+
+  previewGroup.rotation.y += delta * 0.0011;
+  previewGroup.rotation.x = 0.28;
+  previewRenderer.render(previewScene, previewCamera);
   renderer.render(scene, camera);
 }
 
@@ -501,3 +633,24 @@ updateStats();
 resetGame();
 resize();
 requestAnimationFrame(animate);
+
+// 供自动化测试使用的调试接口
+window.__game = {
+  getState: () => ({
+    board,
+    current: current ? { type: current.type, x: current.x, y: current.y, z: current.z, cells: current.cells.map(c => [...c]) } : null,
+    nextType,
+    score,
+    layers,
+    level,
+    paused,
+    gameOver,
+    size: { x: SIZE_X, y: HEIGHT, z: SIZE_Z },
+  }),
+  move,
+  rotate,
+  hardDrop,
+  togglePause,
+  reset: resetGame,
+  setBoardCell: (x, y, z, type) => { board[y][z][x] = type; syncLockedBlocks(); },
+};
